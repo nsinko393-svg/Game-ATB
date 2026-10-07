@@ -1,0 +1,1361 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#d8dbde">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Повний кошик</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Sofia+Sans+Extra+Condensed:wght@800&family=Sofia+Sans+Semi+Condensed:wght@500;700&display=swap">
+<style>
+:root {
+  /* Layout: одна колонка завширшки з поле. Угорі жовтий цінник із кошиком і балами, поруч рекорд;
+     далі рядок таймера і сіре поле 8×8, продукти лежать на ньому без плиток. */
+  color-scheme: light;
+  --bg: #d8dbde;
+  --board: #c6cbcf;
+  --well: #bac0c5;
+  --ink: #182025;
+  --muted: #4c565c;
+  --line: #aab1b6;
+  --tag: #ffd53d;
+  --tag-edge: #d9a600;
+  --tag-ink: #1b1904;
+  --hot: #dc3a35;
+  --hot-edge: #a32522;
+  --on-hot: #ffffff;
+  --f-display: "Sofia Sans Extra Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "Sofia Sans Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --f-util: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { height: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100%;
+  min-height: 100dvh;
+  display: flex;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+  color: var(--ink);
+  font: 500 15px/1.3 var(--f-body);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+.app {
+  position: relative;
+  flex: none;
+  margin: auto;
+  width: min(100%, 860px, calc(100vh - 206px));
+  width: min(100%, 860px, calc(100dvh - 206px));
+  min-width: min(100%, 280px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Цінник і рекорд */
+.top {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+}
+.lbl {
+  font: 500 10.5px/1 var(--f-util);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.tag {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px 10px 10px;
+  border-radius: 14px;
+  background: var(--tag);
+  color: var(--tag-ink);
+  box-shadow: 0 3px 0 var(--tag-edge);
+}
+.cart {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: clamp(44px, 14cqw, 56px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--tag-ink);
+  color: var(--tag);
+}
+.cart svg { width: 54%; height: 54%; }
+.sum {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.num {
+  font: 800 clamp(40px, 13cqw, 58px)/.86 var(--f-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.num.long { font-size: clamp(32px, 9.5cqw, 44px); }
+.tag::after {
+  content: "";
+  flex: none;
+  margin-left: auto;
+  width: 52px;
+  height: 42px;
+  background: repeating-linear-gradient(90deg,
+    var(--tag-ink) 0 2px, transparent 2px 4px,
+    var(--tag-ink) 4px 5px, transparent 5px 8px,
+    var(--tag-ink) 8px 11px, transparent 11px 13px);
+  opacity: .82;
+}
+@container (max-width: 470px) { .tag::after { display: none; } }
+
+.side {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 116px;
+  text-align: right;
+}
+.rec { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rec .lbl { color: var(--muted); padding: 3px 0; }
+.rec.is-new .lbl {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--hot);
+  color: var(--on-hot);
+}
+.recnum {
+  font: 800 clamp(26px, 8cqw, 32px)/.9 var(--f-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.btn {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font: 700 15px/1.2 var(--f-body);
+  cursor: pointer;
+  transition: background-color .12s, color .12s;
+}
+.btn:hover { background: var(--ink); color: var(--bg); }
+.btn:focus-visible { outline: 3px solid var(--tag-edge); outline-offset: 2px; }
+.btn.armed, .btn.armed:hover { border-color: var(--hot); background: var(--hot); color: var(--on-hot); }
+
+/* Поле */
+.board {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 1;
+  border-radius: 16px;
+  background: var(--board);
+  box-shadow: inset 0 0 0 1px var(--line);
+  touch-action: none;
+  cursor: pointer;
+}
+.toast {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 6;
+  transform: translate(-50%, -50%);
+  width: max-content;
+  max-width: 88%;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--board);
+  font: 700 15px/1.25 var(--f-body);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Таймер */
+.clock { display: flex; align-items: center; gap: 12px; }
+.time {
+  min-width: 2.1em;
+  font: 800 30px/1 var(--f-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+.bar {
+  flex: 1;
+  min-width: 40px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+  transition: width .2s linear;
+}
+.clock.low .time { color: var(--hot); }
+.clock.low .fill { background: var(--hot); }
+.hint { color: var(--muted); white-space: nowrap; }
+
+/* Кінець гри */
+.over {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: inherit;
+  background: var(--board);
+  background: color-mix(in srgb, var(--board) 90%, transparent);
+  text-align: center;
+  cursor: default;
+}
+.over p { margin: 0; }
+.over-t { font: 700 19px/1.2 var(--f-body); }
+.over-n {
+  font: 800 76px/.95 var(--f-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+.over-s { color: var(--muted); }
+.btn.solid {
+  width: auto;
+  min-height: 48px;
+  margin-top: 14px;
+  padding: 10px 24px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 17px;
+}
+.btn.solid:hover { background: transparent; color: var(--ink); }
+
+@media (max-width: 420px) {
+  body { padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px)); }
+  .app { gap: 10px; }
+  .top { gap: 10px; }
+  .tag { gap: 10px; padding: 8px 12px 8px 8px; }
+  .side { min-width: 104px; }
+  .time { font-size: 26px; }
+  .hint { font-size: 9.5px; letter-spacing: .05em; }
+  .over-n { font-size: 64px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .over-n { font-size: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) { .btn, .fill { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div class="tag">
+      <span class="cart" id="cart" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h2.6l2.3 11h10.4l2-7.5H6.2"/><circle cx="9" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/></svg>
+      </span>
+      <div class="sum">
+        <span class="lbl">Балів у кошику</span>
+        <span class="num" id="num"><span id="score">0</span></span>
+      </div>
+    </div>
+    <div class="side">
+      <div class="rec" id="rec">
+        <span class="lbl" id="recLbl">Рекорд</span>
+        <span class="recnum" id="best">0</span>
+      </div>
+      <button class="btn" id="newBtn" type="button">Нова гра</button>
+    </div>
+  </header>
+
+  <div class="clock" id="clock">
+    <span class="time" id="time" aria-label="Залишилось часу">1:00</span>
+    <span class="bar" aria-hidden="true"><span class="fill" id="fill"></span></span>
+    <span class="lbl hint" id="hint">+10 с на 50 балах</span>
+  </div>
+
+  <div class="board" id="board" role="application" aria-label="Ігрове поле 8 на 8. Тягни продукт на сусідню клітинку, щоб зібрати три в ряд.">
+    <div class="toast" id="toast" role="status" hidden></div>
+    <div class="over" id="over" hidden>
+      <p class="over-t">Час вийшов</p>
+      <p class="over-n" id="overNum">0</p>
+      <p class="lbl over-s" id="overSub">Рекорд: 0</p>
+      <button class="btn solid" id="againBtn" type="button">Грати ще</button>
+    </div>
+  </div>
+
+  <canvas id="fx" aria-hidden="true"></canvas>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const N = 8, CELLS = N * N;
+  const K = 7; // батон, пакет молока, помідор, банка огірків, гречка, сир, баклажан
+  const ROCKET_H = K, ROCKET_V = K + 1, BOMB = K + 2;
+  const SWAP_MS = 130, CLEAR_MS = 150;
+  const GRAVITY = 95, V0 = 5, VMAX = 34; // у клітинках за секунду
+  const STORE = 'povnyi-koshyk:v5';
+  const START_MS = 60000, BONUS_EVERY = 50, BONUS_MS = 10000; // +10 с за кожні 50 балів
+  const EMOJI_FONT = '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+  const NUM_FONT = '"Sofia Sans Extra Condensed","Arial Narrow",sans-serif';
+
+  const $ = id => document.getElementById(id);
+  const app = $('app'), boardEl = $('board'), cv = $('fx'), ctx = cv.getContext('2d');
+  const cartEl = $('cart'), scoreEl = $('score'), numEl = $('num'), bestEl = $('best');
+  const recEl = $('rec'), recLbl = $('recLbl'), newBtn = $('newBtn'), toastEl = $('toast');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const clockEl = $('clock'), timeEl = $('time'), fillEl = $('fill'), hintEl = $('hint');
+  const overEl = $('over'), overNum = $('overNum'), overSub = $('overSub'), againBtn = $('againBtn');
+  const fmt = new Intl.NumberFormat('uk-UA');
+
+  const grid = new Array(CELLS).fill(null);
+  const anims = [], falling = [], flyers = [], popups = [], blasts = [], sprites = [];
+  let score = 0, shown = 0, best = 0, bestFloor = 0, wasNew = false;
+  let busy = false, sel = -1, pendingNew = false, snap = null, fallDone = null;
+  let scale = 1, cs = 0, bx = 0, by = 0, bw = 0, cartX = 0, cartY = 0, col = null;
+  let raf = 0, last = 0, lastBump = 0, bg = null;
+  let left = START_MS, deadline = 0, over = false, nextBonus = BONUS_EVERY;
+
+  const tile = (k, c, r) => ({ k, x: c, y: r, ty: r, vy: 0, pop: 0, land: 0 });
+  const rnd = n => (Math.random() * n) | 0;
+  const CLUSTER = .65; // шанс, що новий продукт повторить сусіда: більше груп і довших рядів
+  const kindAt = (c, r) => (c < 0 || r < 0 || c >= N || r >= N || !grid[r * N + c]) ? -1 : grid[r * N + c].k;
+
+  /* ---------- Правила ---------- */
+
+  const makesRun = (c, r, k) =>
+    (kindAt(c - 1, r) === k && (kindAt(c - 2, r) === k || kindAt(c + 1, r) === k)) ||
+    (kindAt(c + 1, r) === k && kindAt(c + 2, r) === k) ||
+    (kindAt(c, r - 1) === k && (kindAt(c, r - 2) === k || kindAt(c, r + 1) === k)) ||
+    (kindAt(c, r + 1) === k && kindAt(c, r + 2) === k);
+
+  // Новий продукт без готової трійки, але часто такий самий, як сусід.
+  function pickKind(c, r) {
+    const near = [];
+    for (const k of [kindAt(c - 1, r), kindAt(c + 1, r), kindAt(c, r - 1), kindAt(c, r + 1)]) if (k >= 0 && k < K) near.push(k);
+    for (let i = 0; i < 40; i++) {
+      const k = near.length && Math.random() < CLUSTER ? near[rnd(near.length)] : rnd(K);
+      if (!makesRun(c, r, k)) return k;
+    }
+    return rnd(K);
+  }
+
+  function fillBoard(popIn) {
+    const now = performance.now();
+    do {
+      grid.fill(null);
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const t = tile(pickKind(c, r), c, r);
+        if (popIn && !reduced) t.pop = now + (c + r) * 15;
+        grid[r * N + c] = t;
+      }
+    } while (!hasMoves());
+    ensureMoves(false);
+  }
+
+  function scanLine(start, step, h, out) {
+    let n = 1;
+    for (let p = 1; p <= N; p++) {
+      const a = grid[start + (p - 1) * step], b = p < N ? grid[start + p * step] : null;
+      if (a && b && a.k === b.k && a.k < K) { n++; continue; }
+      if (n >= 3) {
+        const cells = [];
+        for (let q = p - n; q < p; q++) cells.push(start + q * step);
+        out.push({ cells, h });
+      }
+      n = 1;
+    }
+  }
+
+  function findRuns() {
+    const runs = [];
+    for (let r = 0; r < N; r++) scanLine(r * N, 1, true, runs);
+    for (let c = 0; c < N; c++) scanLine(c, N, false, runs);
+    return runs;
+  }
+
+  function inRun(c, r) {
+    const k = kindAt(c, r);
+    if (k < 0 || k >= K) return false;
+    let n = 1;
+    for (let x = c - 1; kindAt(x, r) === k; x--) n++;
+    for (let x = c + 1; kindAt(x, r) === k; x++) n++;
+    if (n >= 3) return true;
+    n = 1;
+    for (let y = r - 1; kindAt(c, y) === k; y--) n++;
+    for (let y = r + 1; kindAt(c, y) === k; y++) n++;
+    return n >= 3;
+  }
+
+  function hasMoves() {
+    for (let i = 0; i < CELLS; i++) if (grid[i] && grid[i].k >= K) return true;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const i = r * N + c;
+      for (let d = 0; d < 2; d++) {
+        const c2 = c + (d ? 0 : 1), r2 = r + (d ? 1 : 0);
+        if (c2 >= N || r2 >= N) continue;
+        const j = r2 * N + c2, a = grid[i], b = grid[j];
+        if (!a || !b || a.k === b.k) continue;
+        grid[i] = b; grid[j] = a;
+        const ok = inRun(c, r) || inRun(c2, r2);
+        grid[i] = a; grid[j] = b;
+        if (ok) return true;
+      }
+    }
+    return false;
+  }
+
+  // Скільки є ходів, що збирають бодай три в ряд (без ракет і бомб).
+  function countMoves(max) {
+    let n = 0;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      for (let d = 0; d < 2; d++) {
+        const c2 = c + (d ? 0 : 1), r2 = r + (d ? 1 : 0);
+        if (c2 >= N || r2 >= N) continue;
+        const i = r * N + c, j = r2 * N + c2, a = grid[i], b = grid[j];
+        if (!a || !b || a.k === b.k || a.k >= K || b.k >= K) continue;
+        grid[i] = b; grid[j] = a;
+        const ok = inRun(c, r) || inRun(c2, r2);
+        grid[i] = a; grid[j] = b;
+        if (ok && ++n >= max) return n;
+      }
+    }
+    return n;
+  }
+
+  // Вирощує на полі готовий хід: два-чотири однакові продукти та один, який можна підсунути в ряд.
+  // Іноді хід дає 4 чи 5 в ряд.
+  function plantMove(pop) {
+    const now = performance.now();
+    for (let tries = 0; tries < 80; tries++) {
+      const horiz = Math.random() < .5, roll = Math.random();
+      const len = roll < .1 ? 5 : roll < .35 ? 4 : 3;
+      const span = len === 5 ? 5 : len === 4 ? 4 : 3 + rnd(2);
+      const side = len === 3 && span === 4 ? 0 : (Math.random() < .5 ? -1 : 1);
+      const p = rnd(N - span + 1), q = rnd(N);
+      const at = (u, v) => horiz ? v * N + u : u * N + v; // u: уздовж лінії, v: упоперек
+      // клітини лінії: X X _ X (4) / X X _ X X (5) / X X _ (3, з сусідом збоку) / X X _ X (3, горизонтальний обмін)
+      const xs = len === 5 ? [p, p + 1, p + 3, p + 4] : len === 4 ? [p, p + 1, p + 3] : span === 4 ? [p, p + 1, p + 3] : [p, p + 1];
+      const hole = p + 2;
+      const helper = len === 3 && span === 4 ? null : q + side;
+      if (helper !== null && (helper < 0 || helper >= N)) continue;
+      const cells = xs.map(u => at(u, q)).concat(helper === null ? [] : [at(hole, helper)], [at(hole, q)]);
+      if (cells.some(i => !grid[i] || grid[i].k >= K)) continue;
+      const X = rnd(K), old = cells.map(i => grid[i]);
+      const set = i => { if (grid[i].k !== X) grid[i] = tile(X, i % N, (i / N) | 0); };
+      cells.slice(0, cells.length - 1).forEach(set);
+      const hi = at(hole, q);
+      if (grid[hi].k === X) grid[hi] = tile((X + 1 + rnd(K - 1)) % K, hi % N, (hi / N) | 0);
+      if (!findRuns().length) {
+        if (pop && !reduced) cells.forEach(i => { if (grid[i] !== old[cells.indexOf(i)]) grid[i].pop = now; });
+        return true;
+      }
+      cells.forEach((i, n) => { grid[i] = old[n]; });
+    }
+    return false;
+  }
+
+  // Після кожного ходу на полі мають бути щонайменше три способи зібрати три в ряд.
+  function ensureMoves(pop) {
+    for (let guard = 0; guard < 30 && countMoves(3) < 3; guard++) if (!plantMove(pop)) break;
+    if (pop) kick();
+  }
+
+  // Прибирає зібрані ряди: 1 бал за продукт, +2 за четвірку, +5 за п'ятірку.
+  function clearRuns(runs, pivots) {
+    const ptsAt = new Map(), spawn = new Map();
+    let total = 0;
+    for (const run of runs) {
+      const cells = run.cells, len = cells.length;
+      const bonus = len >= 5 ? 5 : len === 4 ? 2 : 0;
+      for (const i of cells) ptsAt.set(i, (ptsAt.get(i) || 0) + 1);
+      ptsAt.set(cells[0], ptsAt.get(cells[0]) + bonus);
+      total += len + bonus;
+      if (len >= 4) {
+        let at = -1;
+        if (pivots) for (const p of pivots) if (cells.includes(p) && !spawn.has(p)) at = p;
+        if (at < 0) {
+          const mid = cells[len >> 1];
+          at = spawn.has(mid) ? cells.find(i => !spawn.has(i)) : mid;
+        }
+        if (at !== undefined) spawn.set(at, len >= 5 ? BOMB : run.h ? ROCKET_H : ROCKET_V);
+      }
+      const a = cells[0], b = cells[len - 1];
+      popup(((a % N) + (b % N)) / 2, (((a / N) | 0) + ((b / N) | 0)) / 2, len + bonus, len >= 4);
+    }
+    let order = 0;
+    for (const [i, pts] of ptsAt) {
+      const t = grid[i];
+      grid[i] = null;
+      fly(t, pts, order++);
+    }
+    const now = performance.now();
+    for (const [i, k] of spawn) {
+      const t = tile(k, i % N, (i / N) | 0);
+      if (!reduced) t.pop = now;
+      grid[i] = t;
+    }
+    addScore(total);
+  }
+
+  // Запускає ракети й бомби; зачеплені ракети й бомби спрацьовують ланцюгом.
+  function blast(starts) {
+    const gone = new Set(), stack = starts.slice(), now = performance.now();
+    while (stack.length) {
+      const i = stack.pop(), t = grid[i];
+      if (!t || gone.has(i)) continue;
+      gone.add(i);
+      const r = (i / N) | 0, c = i % N;
+      let c0 = c, c1 = c, r0 = r, r1 = r;
+      if (t.k === ROCKET_H) { c0 = 0; c1 = N - 1; }
+      else if (t.k === ROCKET_V) { r0 = 0; r1 = N - 1; }
+      else if (t.k === BOMB) {
+        c0 = Math.max(0, c - 2); c1 = Math.min(N - 1, c + 2);
+        r0 = Math.max(0, r - 2); r1 = Math.min(N - 1, r + 2);
+      } else continue;
+      blasts.push({ k: t.k, c0, c1, r0, r1, t0: now });
+      for (let y = r0; y <= r1; y++) for (let x = c0; x <= c1; x++) {
+        const j = y * N + x, u = grid[j];
+        if (!u || gone.has(j)) continue;
+        if (u.k >= K) stack.push(j); else gone.add(j);
+      }
+    }
+    let pts = 0, order = 0;
+    for (const i of gone) {
+      const t = grid[i];
+      grid[i] = null;
+      if (t.k < K) { fly(t, 1, order++); pts++; }
+    }
+    if (pts) popup(starts[0] % N, (starts[0] / N) | 0, pts, true);
+    addScore(pts);
+  }
+
+  function collapse() {
+    for (let c = 0; c < N; c++) {
+      let w = N - 1;
+      for (let r = N - 1; r >= 0; r--) {
+        const t = grid[r * N + c];
+        if (!t) continue;
+        if (w !== r) {
+          grid[w * N + c] = t; grid[r * N + c] = null;
+          t.ty = w; t.vy = V0; falling.push(t);
+        }
+        w--;
+      }
+      const m = w + 1;
+      for (let r = w; r >= 0; r--) {
+        const t = tile(pickKind(c, r), c, r - m);
+        t.ty = r; t.vy = V0;
+        grid[r * N + c] = t; falling.push(t);
+      }
+    }
+    if (!falling.length) return Promise.resolve();
+    kick();
+    return new Promise(res => { fallDone = res; });
+  }
+
+  async function settle(pivots) {
+    for (;;) {
+      const runs = findRuns();
+      if (!runs.length) return;
+      clearRuns(runs, pivots);
+      pivots = null;
+      await wait(CLEAR_MS);
+      await collapse();
+    }
+  }
+
+  async function move(steps) {
+    if (busy || over) return;
+    busy = true; sel = -1;
+    try {
+      await steps();
+      ensureMoves(true);
+      if (!hasMoves()) {
+        toast('Ходів не лишилось. Викладаємо нові продукти');
+        await wait(700);
+        fillBoard(true);
+        kick();
+        await wait(500);
+      }
+    } catch (e) { console.error(e); }
+    busy = false;
+    if (pendingNew) { pendingNew = false; newGame(); } else { save(); tick(); }
+  }
+
+  const swap = (a, b) => move(async () => {
+    const ta = grid[a], tb = grid[b];
+    if (!ta || !tb) return;
+    await slide(ta, tb);
+    grid[a] = tb; grid[b] = ta;
+    const fired = [];
+    if (tb.k >= K) fired.push(a);
+    if (ta.k >= K) fired.push(b);
+    if (fired.length) {
+      blast(fired);
+      await wait(CLEAR_MS);
+      await collapse();
+      await settle(null);
+    } else if (findRuns().length) {
+      await settle([a, b]);
+    } else {
+      await slide(ta, tb);
+      grid[a] = ta; grid[b] = tb;
+    }
+  });
+
+  const fire = i => move(async () => {
+    blast([i]);
+    await wait(CLEAR_MS);
+    await collapse();
+    await settle(null);
+  });
+
+  function newGame() {
+    if (busy) { pendingNew = true; return; }
+    score = shown = 0;
+    sel = -1;
+    left = START_MS; deadline = 0; over = false; nextBonus = BONUS_EVERY;
+    overEl.hidden = true;
+    flyers.length = popups.length = blasts.length = 0;
+    bestFloor = best;
+    fillBoard(true);
+    renderScore();
+    renderClock();
+    save();
+    kick();
+  }
+
+  /* ---------- Бали й рекорд ---------- */
+
+  function addScore(pts) {
+    if (!pts) return;
+    score += pts;
+    while (score >= nextBonus) { nextBonus += BONUS_EVERY; addTime(); }
+    if (score > best) { best = score; queueCloud(); }
+    if (reduced) { shown = score; renderScore(); }
+  }
+
+  function renderScore() {
+    const s = fmt.format(shown);
+    scoreEl.textContent = s;
+    numEl.classList.toggle('long', s.length > 7);
+    bestEl.textContent = fmt.format(Math.max(bestFloor, shown));
+    const isNew = bestFloor > 0 && shown > bestFloor;
+    if (isNew !== wasNew) {
+      wasNew = isNew;
+      recEl.classList.toggle('is-new', isNew);
+      recLbl.textContent = isNew ? 'Новий рекорд' : 'Рекорд';
+    }
+  }
+
+  function save() {
+    let g = '';
+    for (let i = 0; i < CELLS; i++) g += grid[i] ? grid[i].k : 0;
+    snap = { g, score, best, left: timeLeft() };
+    try { localStorage.setItem(STORE, JSON.stringify({ best })); } catch (e) { /* без сховища гра працює далі */ }
+  }
+
+  function restoreBoard(s) {
+    if (!s || typeof s.g !== 'string' || s.g.length !== CELLS || /[^0-9]/.test(s.g)) return false;
+    for (let i = 0; i < CELLS; i++) grid[i] = tile(+s.g[i], i % N, (i / N) | 0);
+    return !findRuns().length && hasMoves();
+  }
+
+  const whole = v => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+
+  // Рекорд дублюється в особистому сховищі артефакту, щоб не залежати від одного браузера.
+  let cloudDoc = null, cloudBest = 0, cloudTimer = 0, cloudSince = 0, cloudBusy = false;
+
+  async function initCloud() {
+    if (!window.claude || typeof window.claude.use !== 'function') return;
+    try {
+      const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+      if (!db || !user) return;
+      const id = await user.id();
+      if (!id) return;
+      const doc = db.doc('data/users/' + id + '/timed8b');
+      const got = await doc.get();
+      cloudBest = got.exists ? whole(got.data().best) : 0;
+      cloudDoc = doc;
+      if (cloudBest > best) {
+        best = cloudBest;
+        bestFloor = Math.max(bestFloor, cloudBest);
+        renderScore();
+        if (!busy) save();
+      } else if (best > cloudBest) queueCloud();
+    } catch (e) { cloudDoc = null; }
+  }
+
+  function queueCloud() {
+    if (!cloudDoc) return;
+    const now = Date.now();
+    if (!cloudSince) cloudSince = now;
+    clearTimeout(cloudTimer);
+    cloudTimer = setTimeout(flushCloud, Math.max(0, Math.min(3000, cloudSince + 20000 - now)));
+  }
+
+  async function flushCloud() {
+    clearTimeout(cloudTimer);
+    cloudTimer = 0; cloudSince = 0;
+    if (!cloudDoc || cloudBusy || best <= cloudBest) return;
+    cloudBusy = true;
+    const v = best;
+    try { await cloudDoc.set({ best: v }); cloudBest = v; }
+    catch (e) { if (!e || e.code !== 'unavailable') cloudDoc = null; }
+    cloudBusy = false;
+    if (best > cloudBest) queueCloud();
+  }
+
+  /* ---------- Таймер ---------- */
+
+  const timeLeft = () => (deadline ? Math.max(0, deadline - performance.now()) : left);
+
+  function startClock() {
+    if (!deadline && !over && left > 0) deadline = performance.now() + left;
+  }
+
+  function pauseClock() {
+    if (deadline) { left = timeLeft(); deadline = 0; }
+  }
+
+  function addTime() {
+    if (deadline) deadline = Math.max(deadline, performance.now()) + BONUS_MS;
+    else left += BONUS_MS;
+    if (!reduced && timeEl.animate) {
+      timeEl.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.3)' }, { transform: 'scale(1)' }], { duration: 280, easing: 'ease-out' });
+    }
+    renderClock();
+  }
+
+  function renderClock() {
+    const ms = timeLeft(), sec = Math.ceil(ms / 1000);
+    const text = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+    if (timeEl.textContent !== text) timeEl.textContent = text;
+    fillEl.style.width = Math.min(100, ms / START_MS * 100) + '%';
+    clockEl.classList.toggle('low', ms <= 10000);
+    const hint = '+' + BONUS_MS / 1000 + ' с на ' + nextBonus + ' балах';
+    if (hintEl.textContent !== hint) hintEl.textContent = hint;
+  }
+
+  // Якщо час скінчився посеред ходу, хід дограється: бали за нього ще можуть додати секунди.
+  function tick() {
+    renderClock();
+    if (deadline && !busy && !over && timeLeft() <= 0) endGame();
+  }
+
+  function endGame() {
+    over = true;
+    deadline = 0; left = 0; sel = -1;
+    overNum.textContent = fmt.format(score);
+    overSub.textContent = score > bestFloor ? 'Новий рекорд' : 'Рекорд: ' + fmt.format(best);
+    overEl.hidden = false;
+    disarm();
+    renderClock();
+    save();
+    kick();
+  }
+
+  /* ---------- Анімація ---------- */
+
+  function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+
+  function tween(dur, step) {
+    return new Promise(res => { anims.push({ t0: performance.now(), dur, step, res }); kick(); });
+  }
+  const wait = ms => tween(ms, null);
+
+  function slide(ta, tb) {
+    const ax = ta.x, ay = ta.y, tx = tb.x, ty = tb.y;
+    return tween(SWAP_MS, p => {
+      const e = 1 - (1 - p) * (1 - p) * (1 - p);
+      ta.x = ax + (tx - ax) * e; ta.y = ay + (ty - ay) * e;
+      tb.x = tx + (ax - tx) * e; tb.y = ty + (ay - ty) * e;
+    });
+  }
+
+  function fly(t, pts, order) {
+    if (reduced) return;
+    const x0 = bx + (t.x + .5) * cs, y0 = by + (t.y + .5) * cs;
+    const far = Math.hypot(cartX - x0, cartY - y0) / (cs || 1);
+    flyers.push({ k: t.k, x0, y0, pts, t0: performance.now() + Math.min(order * 9, 260), dur: 360 + far * 14 });
+  }
+
+  function popup(c, r, pts, big) {
+    popups.push({ c, r, text: '+' + pts, big, t0: performance.now() });
+  }
+
+  function bump(now) {
+    if (now - lastBump < 90 || !cartEl.animate) return;
+    lastBump = now;
+    cartEl.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.16)' }, { transform: 'scale(1)' }], { duration: 170, easing: 'ease-out' });
+  }
+
+  function frame(now) {
+    raf = 0;
+    const dt = last ? Math.min(.05, (now - last) / 1000) : 1 / 60;
+    last = now;
+
+    if (anims.length) {
+      let w = 0;
+      for (let i = 0; i < anims.length; i++) {
+        const a = anims[i], p = Math.min(1, Math.max(0, (now - a.t0) / a.dur));
+        if (a.step) a.step(p);
+        if (p >= 1) a.res(); else anims[w++] = a;
+      }
+      anims.length = w;
+    }
+
+    if (falling.length) {
+      let w = 0;
+      for (let i = 0; i < falling.length; i++) {
+        const t = falling[i];
+        t.vy = Math.min(VMAX, t.vy + GRAVITY * dt);
+        t.y += t.vy * dt;
+        if (t.y >= t.ty) { t.y = t.ty; t.vy = 0; if (!reduced) t.land = now; }
+        else falling[w++] = t;
+      }
+      falling.length = w;
+      if (!w && fallDone) { const done = fallDone; fallDone = null; done(); }
+    }
+
+    const live = draw(now);
+    if (anims.length || falling.length || live) kick(); else last = 0;
+  }
+
+  /* ---------- Малювання ---------- */
+
+  function rr(g, x, y, w, h, r) {
+    g.beginPath();
+    if (g.roundRect) { g.roundRect(x, y, w, h, r); return; }
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  }
+
+  function glyph(g, ch, cx, cy, px) {
+    g.font = Math.round(px) + 'px ' + EMOJI_FONT;
+    g.textAlign = 'center';
+    g.textBaseline = 'alphabetic';
+    g.fillStyle = col.ink;
+    const m = g.measureText(ch);
+    const a = m.actualBoundingBoxAscent, d = m.actualBoundingBoxDescent;
+    const l = m.actualBoundingBoxLeft, r = m.actualBoundingBoxRight;
+    const dy = Number.isFinite(a) && Number.isFinite(d) ? (a - d) / 2 : px * .35;
+    const dx = Number.isFinite(l) && Number.isFinite(r) ? (l - r) / 2 : 0;
+    g.fillText(ch, cx + dx, cy + dy);
+  }
+
+  function arrow(g, cx, cy, len, vertical) {
+    const h = len / 2, a = len * .24;
+    g.save();
+    g.translate(cx, cy);
+    if (vertical) g.rotate(Math.PI / 2);
+    g.lineWidth = len * .17;
+    g.lineCap = g.lineJoin = 'round';
+    g.strokeStyle = col.tagInk;
+    g.beginPath();
+    g.moveTo(-h, 0); g.lineTo(h, 0);
+    g.moveTo(-h + a, -a); g.lineTo(-h, 0); g.lineTo(-h + a, a);
+    g.moveTo(h - a, -a); g.lineTo(h, 0); g.lineTo(h - a, a);
+    g.stroke();
+    g.restore();
+  }
+
+  // Малюнки в сітці 100×100: градієнти, блікі й тонкий темний контур.
+  function icon(g, k, s) {
+    g.save();
+    g.scale(s / 100, s / 100);
+    g.lineJoin = g.lineCap = 'round';
+    g.lineWidth = 1.7;
+    const OL = 'rgba(30,36,40,.62)';
+    g.strokeStyle = OL;
+    const lg = (x0, y0, x1, y1, st) => { const q = g.createLinearGradient(x0, y0, x1, y1); st.forEach(([p, c]) => q.addColorStop(p, c)); return q; };
+    const rg = (x0, y0, r0, x1, y1, r1, st) => { const q = g.createRadialGradient(x0, y0, r0, x1, y1, r1); st.forEach(([p, c]) => q.addColorStop(p, c)); return q; };
+    const fill = c => { g.fillStyle = c; g.fill(); g.stroke(); };
+    const rect = (x, y, w, h, r, c) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); fill(c); };
+    const ell = (x, y, rx, ry, rot, c) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, 7); fill(c); };
+    const poly = (pts, c) => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); fill(c); };
+    const glow = (x, y, rx, ry, rot, a) => { g.save(); g.globalAlpha = a; g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, 7); g.fill(); g.restore(); };
+    const line = (pts, w, c) => { g.save(); g.strokeStyle = c; g.lineWidth = w; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); g.restore(); };
+    const leaf = (x, y, ang, len, wid, c) => {
+      const ca = Math.cos(ang), sa = Math.sin(ang), nx = -sa, ny = ca;
+      g.beginPath(); g.moveTo(x, y);
+      g.quadraticCurveTo(x + ca * len * .5 + nx * wid, y + sa * len * .5 + ny * wid, x + ca * len, y + sa * len);
+      g.quadraticCurveTo(x + ca * len * .5 - nx * wid, y + sa * len * .5 - ny * wid, x, y);
+      g.closePath(); fill(c);
+    };
+
+    if (k === 0) { // батон
+      g.translate(50, 52); g.rotate(-.55);
+      rect(-44, -19, 88, 38, 19, lg(0, -19, 0, 19, [[0, '#f3c982'], [.45, '#dfa24d'], [1, '#b9742d']]));
+      for (const x of [-27, -10, 7, 24]) {
+        line([[x - 6, -12], [x + 1, -1], [x + 7, 11]], 5.4, 'rgba(142,80,24,.78)');
+        line([[x - 3, -14], [x + 4, -2], [x + 10, 9]], 1.5, 'rgba(255,232,176,.85)');
+      }
+      glow(-2, -13, 32, 3.2, 0, .42);
+      g.fillStyle = 'rgba(120,68,20,.35)';
+      for (const [x, y] of [[-34, 7], [-20, 12], [-2, 9], [17, 13], [33, 6], [38, -5]]) { g.beginPath(); g.arc(x, y, 1, 0, 7); g.fill(); }
+    } else if (k === 1) { // пакет молока
+      rect(38, 10, 24, 13, 2, lg(0, 0, 1, 0, [[0, '#d6dee3'], [1, '#aab6be']]));
+      line([[40, 13], [60, 13]], 1, 'rgba(60,70,78,.45)'); line([[40, 16], [60, 16]], 1, 'rgba(60,70,78,.45)'); line([[40, 19], [60, 19]], 1, 'rgba(60,70,78,.45)');
+      poly([[28, 38], [37, 23], [63, 23], [72, 38]], lg(0, 0, 1, 0, [[0, '#f4f7f9'], [1, '#cfd8de']]));
+      rect(28, 38, 44, 54, 2, lg(28, 0, 72, 0, [[0, '#ffffff'], [.62, '#f2f5f7'], [1, '#cdd6dc']]));
+      g.save(); g.beginPath(); g.rect(28, 38, 44, 54); g.clip();
+      g.fillStyle = lg(28, 0, 72, 0, [[0, '#4a8ee0'], [1, '#2b64b0']]); g.fillRect(24, 62, 52, 20);
+      g.restore();
+      g.beginPath(); g.rect(28, 38, 44, 54); g.stroke();
+      g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '800 10px "Sofia Sans Extra Condensed","Arial Narrow",Arial,sans-serif';
+      g.fillText('МОЛОКО', 50, 72.5);
+      g.beginPath(); g.moveTo(50, 44); g.bezierCurveTo(44, 51, 45, 56, 50, 57); g.bezierCurveTo(55, 56, 56, 51, 50, 44);
+      fill('#5b9be6');
+      glow(32.5, 50, 1.8, 9, 0, .7);
+    } else if (k === 2) { // помідор
+      ell(50, 59, 40, 34, 0, rg(36, 45, 3, 50, 59, 48, [[0, '#f58173'], [.4, '#dd3d32'], [1, '#a31f19']]));
+      line([[50, 30], [36, 58], [45, 91]], 1.4, 'rgba(110,18,14,.28)');
+      line([[50, 30], [64, 58], [55, 91]], 1.4, 'rgba(110,18,14,.28)');
+      glow(33, 46, 8.5, 4.6, -.7, .5);
+      for (let i = 0; i < 5; i++) leaf(50, 31, i * 2 * Math.PI / 5 - Math.PI / 2, 19, 5.2, lg(40, 24, 60, 40, [[0, '#6fb55c'], [1, '#3c8438']]));
+      rect(47.5, 14, 5, 15, 2.5, lg(0, 0, 1, 0, [[0, '#5f9e4a'], [1, '#3f7b34']]));
+    } else if (k === 3) { // банка огірків
+      const glass = lg(24, 0, 76, 0, [[0, '#eaf5ef'], [.5, '#d2e8dc'], [1, '#b2d2c0']]);
+      rect(28, 24, 44, 16, 4, glass);
+      rect(23, 34, 54, 58, 12, glass);
+      const pick = (x, y, rot) => {
+        ell(x, y, 8, 22, rot, lg(x - 8, 0, x + 8, 0, [[0, '#8dc064'], [.55, '#559a3e'], [1, '#356f2b']]));
+        g.fillStyle = 'rgba(30,80,28,.55)';
+        for (const [dx, dy] of [[-3, -11], [3, -5], [-3, 1], [3, 8], [-2, 14], [2, -15]]) { g.beginPath(); g.arc(x + dx + rot * dy * -1.5, y + dy, .95, 0, 7); g.fill(); }
+      };
+      pick(36, 65, .13); pick(50, 68, -.04); pick(64, 65, -.15);
+      line([[44, 44], [47, 55]], 1.1, '#2f7a30'); line([[48, 44], [48, 56]], 1.1, '#2f7a30'); line([[52, 44], [49, 55]], 1.1, '#2f7a30');
+      g.beginPath(); g.roundRect ? g.roundRect(23, 34, 54, 58, 12) : g.rect(23, 34, 54, 58);
+      g.fillStyle = 'rgba(226,243,234,.3)'; g.fill(); g.stroke();
+      rect(26, 12, 48, 15, 3.5, lg(0, 12, 0, 27, [[0, '#9aa6ae'], [.5, '#6c7881'], [1, '#4c5760']]));
+      for (let x = 31; x <= 69; x += 5.5) line([[x, 14], [x, 25]], 1, 'rgba(15,20,24,.3)');
+      glow(29.5, 56, 2, 17, 0, .65);
+    } else if (k === 4) { // пачка гречки
+      rect(24, 12, 52, 80, 3, lg(24, 0, 76, 0, [[0, '#dca963'], [.5, '#cf9650'], [1, '#b0713a']]));
+      rect(24, 12, 52, 10, 2, '#a96a2e'); rect(24, 82, 52, 10, 2, '#a96a2e');
+      for (let x = 27; x <= 73; x += 4) { line([[x, 13.5], [x + 2, 20.5]], 1, 'rgba(50,25,8,.45)'); line([[x, 83.5], [x + 2, 90.5]], 1, 'rgba(50,25,8,.45)'); }
+      rect(30, 28, 40, 48, 9, lg(0, 28, 0, 76, [[0, '#fff6df'], [1, '#efdcb0']]));
+      g.fillStyle = '#5a3416'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '800 13px "Sofia Sans Extra Condensed","Arial Narrow",Arial,sans-serif';
+      g.fillText('ГРЕЧКА', 50, 39);
+      line([[38, 46], [62, 46]], 1, 'rgba(90,52,22,.55)');
+      for (const [x, y, r] of [[38, 66, 2.1], [44, 60, .5], [52, 63, 3.6], [59, 58, 1.3], [62, 67, 4.4], [49, 70, 5.2], [40, 55, 3.0], [56, 51, 0.2]]) {
+        g.save(); g.translate(x, y); g.rotate(r);
+        g.beginPath(); g.moveTo(0, -3.4); g.lineTo(3.1, 2.4); g.lineTo(-3.1, 2.4); g.closePath();
+        g.fillStyle = lg(-4, -4, 4, 4, [[0, '#9a6230'], [1, '#5f3516']]); g.fill(); g.lineWidth = 1; g.stroke();
+        g.restore();
+      }
+      glow(30, 48, 1.8, 30, 0, .25);
+    } else if (k === 5) { // сир
+      g.translate(0, -2);
+      poly([[10, 66], [88, 34], [88, 80], [10, 80]], lg(0, 34, 0, 80, [[0, '#f8cf55'], [1, '#dea027']]));
+      poly([[10, 66], [88, 34], [74, 27], [10, 52]], lg(0, 27, 0, 66, [[0, '#fdeaa6'], [1, '#f7d56e']]));
+      const hole = (x, y, r) => {
+        g.fillStyle = '#b9780f'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+        g.fillStyle = '#e1a521'; g.beginPath(); g.arc(x + .7, y + .9, r - 1.3, 0, 7); g.fill();
+      };
+      hole(27, 72, 5.2); hole(50, 69, 4.4); hole(63, 56, 6.2); hole(78, 68, 4); hole(37, 60, 3.2); hole(70, 76, 2.4);
+      g.fillStyle = 'rgba(190,130,20,.55)'; g.beginPath(); g.ellipse(36, 53, 2.8, 1.4, -.35, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(57, 44, 2.4, 1.2, -.35, 0, 7); g.fill();
+      glow(40, 59, 14, 1.8, -.37, .35);
+    } else { // баклажан
+      g.translate(50, 56); g.rotate(.55);
+      g.beginPath();
+      g.moveTo(-8, -34); g.bezierCurveTo(8, -34, 10, -14, 16, 0);
+      g.bezierCurveTo(27, 22, 15, 42, -5, 42);
+      g.bezierCurveTo(-26, 42, -30, 18, -18, -4);
+      g.bezierCurveTo(-12, -16, -15, -30, -8, -34);
+      fill(rg(-9, 12, 2, -3, 8, 42, [[0, '#a96fc8'], [.35, '#7c4099'], [1, '#3e1a58']]));
+      glow(-12, 12, 3.6, 17, .22, .38);
+      glow(8, 24, 2, 6, .5, .18);
+      rect(-9.5, -54, 5.5, 22, 2.7, lg(0, 0, 1, 0, [[0, '#5da04f'], [1, '#3a7336']]));
+      for (const a of [2.75, 2.2, 1.57, .95, .4]) leaf(-7, -35, a, 17, 5, lg(-20, -35, 6, -20, [[0, '#68ae58'], [1, '#3b7a37']]));
+    }
+    g.restore();
+  }
+
+  function makeSprite(k, s) {
+    const c = document.createElement('canvas');
+    c.width = c.height = s;
+    const g = c.getContext('2d');
+    const cx = s / 2, lip = Math.max(1, Math.round(s * .06));
+    if (k === ROCKET_H || k === ROCKET_V) {
+      const up = k === ROCKET_V;
+      const w = s * (up ? .5 : .88), h = s * (up ? .88 : .5), x = (s - w) / 2, y = (s - h) / 2;
+      const r = Math.min(w, h - lip) / 2;
+      g.fillStyle = col.tagEdge; rr(g, x, y + lip, w, h - lip, r); g.fill();
+      g.fillStyle = col.tag; rr(g, x, y, w, h - lip, r); g.fill();
+      arrow(g, cx, y + (h - lip) / 2, s * .5, up);
+    } else if (k === BOMB) {
+      const r = s * .43, cy = s / 2 - lip / 2;
+      g.fillStyle = col.hotEdge; g.beginPath(); g.arc(cx, cy + lip, r, 0, 7); g.fill();
+      g.fillStyle = col.hot; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+      glyph(g, '💣', cx, cy, s * .56);
+    } else {
+      const t = document.createElement('canvas');
+      t.width = t.height = s;
+      icon(t.getContext('2d'), k, s);
+      g.shadowColor = 'rgba(24,32,37,.34)';
+      g.shadowBlur = s * .05;
+      g.shadowOffsetY = s * .028;
+      g.drawImage(t, 0, 0);
+    }
+    return c;
+  }
+
+  function buildSprites() {
+    const st = getComputedStyle(document.documentElement);
+    const v = n => st.getPropertyValue(n).trim();
+    col = {
+      ink: v('--ink'), board: v('--board'), well: v('--well'),
+      tag: v('--tag'), tagEdge: v('--tag-edge'), tagInk: v('--tag-ink'),
+      hot: v('--hot'), hotEdge: v('--hot-edge')
+    };
+    if (!cs) return;
+    for (let k = 0; k <= BOMB; k++) sprites[k] = makeSprite(k, cs);
+    bg = document.createElement('canvas');
+    bg.width = bg.height = bw;
+    const g = bg.getContext('2d'), m = Math.max(1, Math.round(cs * .035));
+    g.fillStyle = col.well;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      rr(g, c * cs + m, r * cs + m, cs - 2 * m, cs - 2 * m, cs * .2);
+      g.fill();
+    }
+  }
+
+  function measure() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const a = app.getBoundingClientRect(), b = boardEl.getBoundingClientRect(), c = cartEl.getBoundingClientRect();
+    if (!a.width || !b.width) return;
+    const w = Math.round(a.width * dpr), h = Math.round(a.height * dpr);
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    scale = w / a.width;
+    const side = b.width * scale, pad = Math.round(side * .012) + 2;
+    const size = Math.max(4, Math.floor((side - pad * 2) / N));
+    bw = size * N;
+    bx = Math.round((b.left - a.left) * scale + (side - bw) / 2);
+    by = Math.round((b.top - a.top) * scale + (side - bw) / 2);
+    cartX = (c.left - a.left + c.width / 2) * scale;
+    cartY = (c.top - a.top + c.height / 2) * scale;
+    if (size !== cs || !col) { cs = size; buildSprites(); }
+    draw(performance.now());
+    kick();
+  }
+
+  function drawTile(t, now, s) {
+    let sx = s, sy = s, live = false, squash = false;
+    if (t.pop) {
+      const p = (now - t.pop) / 200;
+      if (p >= 1) t.pop = 0;
+      else {
+        if (p <= 0) return true;
+        const q = p - 1;
+        sx = sy = s * (1 + 2.70158 * q * q * q + 1.70158 * q * q);
+        live = true;
+      }
+    } else if (t.land) {
+      const p = (now - t.land) / 160;
+      if (p >= 1) t.land = 0;
+      else {
+        const q = Math.sin(Math.max(0, p) * Math.PI) * .09;
+        sx = 1 + q * .5; sy = 1 - q;
+        squash = live = true;
+      }
+    }
+    const x = bx + t.x * cs, y = by + t.y * cs;
+    if (sx === 1 && sy === 1) ctx.drawImage(sprites[t.k], Math.round(x), Math.round(y));
+    else {
+      const w = cs * sx, h = cs * sy;
+      ctx.drawImage(sprites[t.k], x + (cs - w) / 2, squash ? y + cs - h : y + (cs - h) / 2, w, h);
+    }
+    return live;
+  }
+
+  function draw(now) {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!cs) return false;
+    let live = false;
+    if (bg) ctx.drawImage(bg, bx, by);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bx, by, bw, bw);
+    ctx.clip();
+    for (let i = 0; i < CELLS; i++) {
+      const t = grid[i];
+      if (t && i !== sel && drawTile(t, now, 1)) live = true;
+    }
+    ctx.restore();
+
+    if (sel >= 0 && grid[sel]) {
+      const t = grid[sel], g = cs * .02;
+      drawTile(t, now, 1.1);
+      ctx.lineWidth = Math.max(2, cs * .07);
+      ctx.strokeStyle = col.ink;
+      rr(ctx, bx + t.x * cs + g, by + t.y * cs + g, cs - 2 * g, cs - 2 * g, cs * .2);
+      ctx.stroke();
+    }
+
+    if (blasts.length) {
+      let w = 0;
+      for (let i = 0; i < blasts.length; i++) {
+        const f = blasts[i], p = Math.max(0, (now - f.t0) / 300);
+        if (p >= 1) continue;
+        blasts[w++] = f;
+        const a = (1 - p) * (1 - p);
+        const x = bx + f.c0 * cs, y = by + f.r0 * cs;
+        const fw = (f.c1 - f.c0 + 1) * cs, fh = (f.r1 - f.r0 + 1) * cs;
+        if (f.k === BOMB) {
+          const g = (1 - p) * cs * 1.3;
+          ctx.globalAlpha = a * .45;
+          ctx.fillStyle = col.hot;
+          rr(ctx, x, y, fw, fh, cs * .35); ctx.fill();
+          ctx.globalAlpha = a;
+          ctx.lineWidth = cs * .14;
+          ctx.strokeStyle = col.hot;
+          rr(ctx, x + g, y + g, Math.max(1, fw - 2 * g), Math.max(1, fh - 2 * g), cs * .35); ctx.stroke();
+        } else {
+          const th = cs * (.25 + .6 * (1 - p));
+          ctx.globalAlpha = a * .9;
+          ctx.fillStyle = col.tag;
+          if (f.k === ROCKET_H) rr(ctx, x, y + (cs - th) / 2, fw, th, th / 2);
+          else rr(ctx, x + (cs - th) / 2, y, th, fh, th / 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+      blasts.length = w;
+      if (w) live = true;
+    }
+
+    if (flyers.length) {
+      let w = 0, got = false;
+      for (let i = 0; i < flyers.length; i++) {
+        const f = flyers[i], p = (now - f.t0) / f.dur;
+        if (p >= 1) { shown += f.pts; got = true; continue; }
+        flyers[w++] = f;
+        const q = p < 0 ? 0 : p, e = q * q;
+        const x = f.x0 + (cartX - f.x0) * e;
+        const y = f.y0 + (cartY - f.y0) * e - Math.sin(q * Math.PI) * cs * .6;
+        const s = cs * (1 - .6 * e) * (1 + .22 * Math.sin(Math.min(1, q * 5) * Math.PI));
+        if (q > .85) ctx.globalAlpha = 1 - (q - .85) / .15 * .7;
+        ctx.drawImage(sprites[f.k], x - s / 2, y - s / 2, s, s);
+        if (q > .85) ctx.globalAlpha = 1;
+      }
+      flyers.length = w;
+      if (got) {
+        if (!w) shown = score;
+        renderScore();
+        bump(now);
+      }
+      if (w) live = true;
+    }
+
+    if (popups.length) {
+      let w = 0;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      for (let i = 0; i < popups.length; i++) {
+        const f = popups[i], p = Math.max(0, (now - f.t0) / 720);
+        if (p >= 1) continue;
+        popups[w++] = f;
+        const px = Math.max(17 * scale, cs * (f.big ? .7 : .52));
+        const x = Math.min(cv.width - px, Math.max(px, bx + (f.c + .5) * cs));
+        const y = by + (f.r + .5) * cs - (1 - (1 - p) * (1 - p)) * cs * .8;
+        ctx.font = '800 ' + Math.round(px) + 'px ' + NUM_FONT;
+        ctx.globalAlpha = p < .6 ? 1 : 1 - (p - .6) / .4;
+        ctx.lineWidth = px * .24;
+        ctx.strokeStyle = col.board;
+        ctx.strokeText(f.text, x, y);
+        ctx.fillStyle = col.ink;
+        ctx.fillText(f.text, x, y);
+      }
+      ctx.globalAlpha = 1;
+      popups.length = w;
+      if (w) live = true;
+    }
+
+    return live;
+  }
+
+  /* ---------- Керування ---------- */
+
+  function cellAt(e) {
+    const a = app.getBoundingClientRect();
+    const x = (e.clientX - a.left) * scale - bx, y = (e.clientY - a.top) * scale - by;
+    if (!cs) return -1;
+    const c = Math.min(N - 1, Math.max(0, Math.floor(x / cs)));
+    const r = Math.min(N - 1, Math.max(0, Math.floor(y / cs)));
+    return r * N + c;
+  }
+
+  function adjacent(a, b) {
+    const d = Math.abs(a - b);
+    return d === N || (d === 1 && ((a / N) | 0) === ((b / N) | 0));
+  }
+
+  function tap(i) {
+    if (busy || over) return;
+    const t = grid[i];
+    if (!t) return;
+    if (t.k >= K) { fire(i); return; }
+    if (sel >= 0 && sel !== i && adjacent(sel, i)) { swap(sel, i); return; }
+    sel = sel === i ? -1 : i;
+    kick();
+  }
+
+  let down = null;
+  boardEl.addEventListener('pointerdown', e => {
+    if (e.button > 0 || over) return;
+    startClock();
+    const i = cellAt(e);
+    if (i < 0) return;
+    down = { i, x: e.clientX, y: e.clientY, id: e.pointerId };
+    try { boardEl.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+    e.preventDefault();
+  });
+  boardEl.addEventListener('pointermove', e => {
+    if (!down || e.pointerId !== down.id) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    const th = Math.max(9, Math.min(24, cs / scale * .34));
+    if (Math.abs(dx) < th && Math.abs(dy) < th) return;
+    const i = down.i, c = i % N, r = (i / N) | 0;
+    down = null;
+    let j = -1;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      const c2 = c + (dx > 0 ? 1 : -1);
+      if (c2 >= 0 && c2 < N) j = r * N + c2;
+    } else {
+      const r2 = r + (dy > 0 ? 1 : -1);
+      if (r2 >= 0 && r2 < N) j = r2 * N + c;
+    }
+    if (j >= 0 && !busy) swap(i, j);
+  });
+  boardEl.addEventListener('pointerup', e => {
+    if (!down || e.pointerId !== down.id) return;
+    const i = down.i;
+    down = null;
+    tap(i);
+  });
+  boardEl.addEventListener('pointercancel', () => { down = null; });
+  boardEl.addEventListener('contextmenu', e => e.preventDefault());
+
+  let armed = 0;
+  function disarm() {
+    clearTimeout(armed);
+    armed = 0;
+    newBtn.textContent = 'Нова гра';
+    newBtn.classList.remove('armed');
+  }
+  newBtn.addEventListener('click', () => {
+    if (score > 0 && !armed && !over) {
+      newBtn.textContent = 'Точно?';
+      newBtn.classList.add('armed');
+      armed = setTimeout(disarm, 3000);
+      return;
+    }
+    disarm();
+    newGame();
+  });
+  againBtn.addEventListener('click', newGame);
+
+  let toastTimer = 0;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastEl.hidden = true; }, 1800);
+  }
+
+  /* ---------- Запуск ---------- */
+
+  function start(carried) {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { saved = null; }
+    best = Math.max(whole(saved && saved.best), whole(carried && carried.best));
+    if (carried && carried.left > 0 && restoreBoard(carried)) {
+      score = whole(carried.score);
+      left = carried.left;
+    } else {
+      score = 0;
+      fillBoard(false);
+    }
+    nextBonus = (Math.floor(score / BONUS_EVERY) + 1) * BONUS_EVERY;
+    if (score > best) best = score;
+    bestFloor = best;
+    shown = score;
+    renderScore();
+    renderClock();
+    save();
+    measure();
+    initCloud();
+    setInterval(tick, 200);
+  }
+
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(measure);
+    ro.observe(app);
+    ro.observe(boardEl);
+  }
+  window.addEventListener('resize', measure);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (col) { buildSprites(); kick(); } });
+  let resume = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') {
+      if (resume) { resume = false; startClock(); }
+      return;
+    }
+    if (deadline) { pauseClock(); resume = true; }
+    if (!busy) save();
+    if (cloudTimer) flushCloud();
+  });
+
+  const hot = window.claude && window.claude.hot;
+  if (hot && hot.snapshot) hot.snapshot(() => snap && Object.assign(snap, { left: timeLeft() }));
+  if (hot && hot.ready) hot.ready(start); else start(hot && hot.data);
+})();
+</script>
+</body>
+</html>
